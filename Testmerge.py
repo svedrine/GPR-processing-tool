@@ -1,20 +1,4 @@
-# Copyright (C) 2015-2016: The University of Edinburgh
-#                 Authors: Craig Warren and Antonis Giannopoulos
-#
-# This file is part of gprMax.
-#
-# gprMax is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# gprMax is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with gprMax.  If not, see <http://www.gnu.org/licenses/>.
+# Testmerge v.1.5
 
 import argparse, glob, os
 import h5py
@@ -28,8 +12,8 @@ parser.add_argument('basefilename', help='base name of output file series includ
 args = parser.parse_args()
 
 basefilename = args.basefilename
-outputfile = basefilename + '_merged.out'
-files = glob.glob(basefilename + '*.out')
+outputfile = '%s_merged.out' % (basefilename)
+files = glob.glob('%s*.out' % (basefilename))
 outputfiles = [filename for filename in files if '_merged' not in filename]
 modelruns = len(outputfiles)
 print('Found {} files to merge'.format(modelruns))
@@ -39,7 +23,7 @@ fout = h5py.File(outputfile, 'w')
 temp = [list() for i in range(modelruns)]
 # Add positional data for rxs
 for model in range(modelruns):
-    fin = h5py.File(basefilename + str(model + 1) + '.out', 'r')
+    fin = h5py.File('%s%s.out' % (basefilename, str(model + 1)), 'r')
     nrx = fin.attrs['nrx']
 
     # Write properties for merged file on first iteration
@@ -51,20 +35,20 @@ for model in range(modelruns):
         fout.attrs['dx, dy, dz'] = fin.attrs['dx, dy, dz']
 
         for rx in range(1, nrx + 1):
-            path = '/rxs/rx' + str(rx)
+            path = '/rxs/rx%s/' % (str(rx))
             grp = fout.create_group(path)
             availableoutputs = list(fin[path].keys())
             for output in availableoutputs:
-                grp.create_dataset(output, (fout.attrs['Iterations'], modelruns), dtype=fin[path + '/' + output].dtype)
+                grp.create_dataset(output, (fout.attrs['Iterations'], modelruns), dtype=fin[path + output].dtype)
 
     # For all receivers
     for rx in range(1, nrx + 1):
-        path = '/rxs/rx' + str(rx)
+        path = '/rxs/rx%s/' % (str(rx))
         temp[model].append(fin[path].attrs['Position'])
         availableoutputs = list(fin[path].keys())
         # For all receiver outputs
         for output in availableoutputs:
-            fout[path + '/' + output][:,model] = fin[path + '/' + output][:]
+            fout[path + output][:,model] = fin[path + output][:]
   
     fin.close()
 fout.attrs['merged_positions'] = temp
@@ -73,7 +57,7 @@ fout.close()
 check = input('Do you want to remove the multiple individual output files? [y] or n:')
 if not check or check == 'y':
     for model in range(modelruns):
-        file = basefilename + str(model + 1) + '.out'
+        file = '%s%s.out' % (basefilename, str(model + 1))
         os.remove(file)
 
 
