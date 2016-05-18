@@ -1,0 +1,75 @@
+# time_zero -v.1.0
+
+import argparse
+import h5py
+import numpy as np
+
+from gprMax.exceptions import CmdInputError
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='create a new ouputfile with time zero correction')
+parser.add_argument('filename', help='base name of output file including path')
+parser.add_argument('tzero' , type=float, help = 'time zero (ns)')
+args = parser.parse_args()
+
+filename = args.filename
+outputfile = args.filename.replace('.out', '_zero.out')
+
+# Open filename and read some attributes
+f = h5py.File(filename, 'r')
+nrx = f.attrs['nrx']
+iterations = f.attrs['Iterations']
+modelruns = f.attrs['Modelruns']
+positions = f.attrs['Positions']
+dt = f.attrs['dt']
+time = np.linspace(0, 1, iterations) * (iterations * dt)
+
+# Find time indexation
+tindex = 0
+tzero = args.tzero*1e-9
+while time[tindex] <= tzero:
+	tindex += 1
+
+iterations -= tindex
+
+# Write new outputfile
+fz = h5py.File(outputfile, 'w')
+fz.attrs['Iterations'] = iterations
+fz.attrs['Modelruns'] = modelruns
+fz.attrs['Positions'] = positions
+fz.attrs['dt'] = dt
+fz.attrs['nrx'] = nrx
+
+
+if '_merged' in filename:
+	fz.attrs['nx, ny, nz'] = f.attrs['nx, ny, nz']
+	fz.attrs['dx, dy, dz'] = f.attrs['dx, dy, dz']
+	fz.attrs['merged_positions'] = f.attrs['merged_positions']
+
+for rx in range(1, nrx + 1):
+
+	path = '/rxs/rx%s/' % str(rx)
+	availableoutputs = f[path]
+	
+
+	# Write properties for all availiable outputs
+	grp = fz.create_group(path)
+
+	if modelruns:
+		for output in availableoutputs:
+			modelruns = f['%s%s' % (path, output)].shape[1]
+			for model in range(modelruns):
+				# Initialize
+				if model ==0: 
+					grp.create_dataset(output, (iterations, modelruns), dtype=f['%s%s' %(path, output)].dtype)
+				fz['%s%s' %(path, output)][:, model] = f['%s%s' %(path, output)][tindex:,model]
+				
+	else:
+		for output in availableoutputs:
+				# Initialize
+				grp.create_dataset(output, (iterations,), dtype=f['%s%s' %(path, output)].dtype)
+				fz['%s%s' %(path, output)][:,] = f['%s%s' %(path, output)][tindex:,]
+		
+
+
+	

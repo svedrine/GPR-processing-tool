@@ -1,0 +1,71 @@
+# Fit_hyperolic v.1.2
+
+import os, argparse
+import h5py
+from numpy import sqrt, linspace, abs, amax, amin
+import matplotlib.pyplot as plt
+
+from gprMax.exceptions import CmdInputError
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Plots a B-scan image plus hyberbolic fit', usage='cd gprMax; python -m tools.fit_hyperbolic mergedfile output -p x0 t0 v')
+parser.add_argument('mergedfile', help='name of merged file including path')
+parser.add_argument('output', help='output to be plotted (Ex, Ey, Ez, Hx, Hy, Hz, Ix, Iy, Iz)')
+parser.add_argument('-param', type=float, help='x0 (m), t0 (ns), 0.3 > v(m/ns) > 0.03, R (m) radius', nargs=4)
+parser.add_argument('-window', type=float, help='spatial window of the hyberbol to be plotted [min, max]', nargs=2)
+args = parser.parse_args()
+
+# Read user's parameters 
+mergedfile = args.mergedfile
+window = args.window
+param = args.param
+x0 = param[0]
+t0 = param[1]
+v = param[2]
+r = param[3]
+
+if not 0.3 >= v >= 0.03: 
+	raise CmdInputError('{} (m/ns) is out of range'.format(v))
+
+z0 = (t0 * v + 2 * r) / 2
+v *= 1e09
+
+# Open and read some attributes
+f = h5py.File(mergedfile, 'r')
+positions = f.attrs['Positions']
+modelruns = f.attrs['Modelruns']
+nrx = f.attrs['nrx']
+width = window[1] - window[0]
+dx = positions[1] - positions[0]
+
+# Fit hyperbolic
+x = linspace(window[0], window[1], int(width / dx))
+fit = (2 / v) * (sqrt((x0-x)**2 + z0**2) - r) 
+
+# For all the receivers
+for rx in range(1, nrx + 1):
+	path = '/rxs/rx%s/' % str(rx)
+	availableoutputs = list(f[path].keys())
+	outputdata = f[path + args.output]
+	time = outputdata.shape[0]*f.attrs['dt']
+	
+	if t0 > amax(time)*1e9: 
+		raise CmdInputError('{} (ns) is out of range'.format(t0))
+
+	if not amax(positions) > x0 >  amin(positions): 
+		raise CmdInputError('{} (m) is out of range'.format(x0))  
+
+	# Plot Bscan plus fit hyperbolic
+	fig = plt.figure(num='rx%s'% str(rx), figsize=(20, 10), facecolor='w', edgecolor='w')
+	plt.imshow(outputdata, extent=[amin(positions), amax(positions), time, 0], interpolation='nearest', aspect='auto', cmap='seismic', vmin=-amax(abs(outputdata)), vmax=amax(abs(outputdata)))
+	plt.plot(x, fit, color='black', linewidth=1.0)
+	plt.xlabel('Distance [m]')
+	plt.ylabel('Time [s]')
+	plt.xlim(amin(positions), amax(positions))
+	plt.ylim(amax(time), 0)
+	plt.grid()
+
+plt.show()
+
+
+
